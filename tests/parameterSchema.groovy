@@ -8,7 +8,7 @@ def check={boolean b -> assert b; checks++}
     def defs=parameters.definitions(mode,[platforms:['WeChat','TikTok'],coreVersion:'1.6.0',sourceScript:'return ["A&B"]'])
     def body=parameters.xml(defs)
     def replacements=[PARAMETER_DEFINITIONS_XML:body,DESCRIPTION_XML:'Test &amp; Name',PIPELINE_SCRIPT_XML:'println("test")']
-    def xml=TemplateText.renderTemplate(new File(repo,'resources/unity-minigame/pipeline-job.xml.tpl').getText('UTF-8'),replacements)
+    def xml=TemplateText.renderTemplate(new File(repo,'resources/july-jenkins-library/pipeline-job.xml.tpl').getText('UTF-8'),replacements)
     def root=new XmlParser().parseText(xml)
     def nodes=root.properties.'hudson.model.ParametersDefinitionProperty'.parameterDefinitions[0].children()
     check(nodes.size()==defs.size())

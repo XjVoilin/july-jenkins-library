@@ -9,7 +9,7 @@ import org.jenkinsci.plugins.workflow.job.WorkflowJob
 /**
  * 使用共享库中的专用 XML 模板，为一个 CoreVersion 创建 FullBuild / HotUpdate Job。
  *
- * 模板位于 resources/unity-minigame，不依赖任何历史发布 Job。
+ * 模板位于 resources/july-jenkins-library，不依赖任何历史发布 Job。
  * 生成器只创建 Job，不触发构建、不覆盖已有 Job。
  */
 def call(Map config) {
@@ -42,7 +42,7 @@ def call(Map config) {
         def coreVersion = (params.CORE_VERSION ?: '').trim()
         validateConfig(projectName, coreVersion, buildClass, platforms)
 
-        def template = libraryResource('unity-minigame/pipeline-job.xml.tpl')
+        def template = libraryResource('july-jenkins-library/pipeline-job.xml.tpl')
         def hotSourceScript = unityMiniGameSourceScript(
             kind: 'hot-update', projectName: projectName, coreVersion: coreVersion,
             buildFarmRoot: buildFarmRoot, platforms: platforms)
@@ -169,7 +169,7 @@ private String pipelineScript(String projectName, String displayName,
                               String buildType,
                               String buildFarmRoot, String credentialsFile) {
     def lines = [
-        "@Library('unity-minigame') _",
+        "@Library('july-jenkins-library') _",
         'unityMiniGamePipeline(',
         "    projectName:      ${TemplateText.groovyString(projectName)},",
         "    displayName:      ${TemplateText.groovyString(displayName)},",

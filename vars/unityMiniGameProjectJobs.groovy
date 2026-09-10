@@ -7,7 +7,7 @@ import jenkins.model.Jenkins
 import org.jenkinsci.plugins.workflow.job.WorkflowJob
 
 /**
- * 初始化一个使用 unity-minigame 共享构建流程的新项目。
+ * 初始化一个使用 july-jenkins-library 共享构建流程的新项目。
  *
  * 创建：
  *   Jenkins/<项目>/CreateVersionJobs
@@ -97,14 +97,14 @@ def call(Map config = [:]) {
     def qaXml = qaJobXml(projectName, displayName, buildClass, platforms,
         repoUrl, buildFarmRoot, credentialsFile)
     def createVersionXml = TemplateText.renderTemplate(
-        libraryResource('unity-minigame/create-version-jobs.xml.tpl'),
+        libraryResource('july-jenkins-library/create-version-jobs.xml.tpl'),
         [
             DESCRIPTION_XML: TemplateText.xmlEscape("${displayName}：每次为一个核心版本创建全量与热更 Job"),
             INITIAL_CORE_VERSION_XML: TemplateText.xmlEscape(initialVersion),
             PIPELINE_SCRIPT_XML: TemplateText.xmlEscape(createVersionScript),
         ])
     def codeSplitXml = TemplateText.renderTemplate(
-        libraryResource('unity-minigame/pipeline-job.xml.tpl'),
+        libraryResource('july-jenkins-library/pipeline-job.xml.tpl'),
         [
             DESCRIPTION_XML: TemplateText.xmlEscape("${displayName}：微信/抖音小游戏代码分包"),
             PARAMETER_DEFINITIONS_XML: releaseParameters.xml(
@@ -244,8 +244,8 @@ private void deleteProjectFolder(String projectName) {
 
 private void createProjectDirectory(String projectRoot, String credentialsFile,
                                     String buildFarmRoot) {
-    def jsonTemplate = libraryResource('unity-minigame/credentials.local.json.tpl')
-    def cosTemplate = libraryResource('unity-minigame/cos.yaml.tpl')
+    def jsonTemplate = libraryResource('july-jenkins-library/credentials.local.json.tpl')
+    def cosTemplate = libraryResource('july-jenkins-library/cos.yaml.tpl')
     try {
         bat(
             label: '初始化 BuildFarm 项目目录',
@@ -296,7 +296,7 @@ private String qaJobXml(String projectName, String displayName, String buildClas
                         List<String> platforms, String repoUrl,
                         String buildFarmRoot, String credentialsFile) {
     def script = [
-        "@Library('unity-minigame') _",
+        "@Library('july-jenkins-library') _",
         'unityMiniGamePipeline(',
         "    projectName: ${TemplateText.groovyString(projectName)},",
         "    displayName: ${TemplateText.groovyString(displayName + ' QA 99.99.99')},",
@@ -309,7 +309,7 @@ private String qaJobXml(String projectName, String displayName, String buildClas
         "    credentialsFile: ${TemplateText.groovyString(credentialsFile)},",
         ')'
     ].join('\n')
-    return TemplateText.renderTemplate(libraryResource('unity-minigame/pipeline-job.xml.tpl'), [
+    return TemplateText.renderTemplate(libraryResource('july-jenkins-library/pipeline-job.xml.tpl'), [
         DESCRIPTION_XML: TemplateText.xmlEscape(displayName +
             '：QA 全量包；固定版本 99.99.99，分支 Tuanjie_Build/99.99.99；上传及归档规则同全量构建'),
         PARAMETER_DEFINITIONS_XML: releaseParameters.xml(
@@ -324,7 +324,7 @@ private String versionGeneratorScript(
     List<String> platforms, String repoUrl, String initialVersion,
     String buildFarmRoot, String credentialsFile) {
     def lines = [
-        "@Library('unity-minigame') _",
+        "@Library('july-jenkins-library') _",
         'unityMiniGameVersionJobs(',
         "    projectName:      ${TemplateText.groovyString(projectName)},",
         "    displayName:      ${TemplateText.groovyString(displayName)},",
@@ -344,7 +344,7 @@ private String codeSplitPipelineScript(
     String projectName, String displayName, List<String> platforms,
     String buildFarmRoot, String credentialsFile) {
     def lines = [
-        "@Library('unity-minigame') _",
+        "@Library('july-jenkins-library') _",
         'codeSplitPipeline(',
         "    projectName:      ${TemplateText.groovyString(projectName)},",
         "    displayName:      ${TemplateText.groovyString(displayName + ' CodeSplit')},",

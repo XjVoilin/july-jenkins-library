@@ -26,7 +26,7 @@ def call(Map config) {
         SOURCE_PROJECT_NAME: TemplateText.groovyString(project),
     ]
     if (kind == 'hot-update') replacements.SOURCE_CORE_VERSION = TemplateText.groovyString(version)
-    def script = libraryResource("unity-minigame/${kind}-source.groovy.tpl")
+    def script = libraryResource("july-jenkins-library/${kind}-source.groovy.tpl")
     script = script.replace('\r\n', '\n').replace('\r', '\n')
     return TemplateText.renderTemplate(script, replacements)
 }

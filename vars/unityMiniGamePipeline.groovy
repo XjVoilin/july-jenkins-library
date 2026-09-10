@@ -6,7 +6,7 @@ import org.july.release.ReleaseStorage
  * 每个 CoreVersion 对应 2 个 Jenkins Item。新版本推荐通过 unityMiniGameVersionJobs 生成，避免手工修改多处版本号。
  *
  *   全量构建:
- *   @Library('unity-minigame') _
+ *   @Library('july-jenkins-library') _
  *   unityMiniGamePipeline(
  *       projectName: 'GooseMarket',
  *       displayName: '大鹅超市 v1.3.0 全量',
@@ -18,7 +18,7 @@ import org.july.release.ReleaseStorage
  *   )
  *
  *   热更构建:
- *   @Library('unity-minigame') _
+ *   @Library('july-jenkins-library') _
  *   unityMiniGamePipeline(
  *       projectName: 'GooseMarket',
  *       displayName: '大鹅超市 v1.3.0 热更',

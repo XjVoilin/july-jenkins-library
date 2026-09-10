@@ -21,7 +21,7 @@
 
 ```groovy
 recovery = [projectName:'GooseMarket', platform:'WeChat', coreVersion:'1.6.0', sourceBuild:'4']
-evaluate(new File('D:/Jenkins/shared-library/tools/recover.groovy'))
+evaluate(new File('D:/Jenkins/july-jenkins-library/tools/recover.groovy'))
 ```
 
 只查项目锁时可省略 platform/coreVersion/sourceBuild；查机器级抖音会话锁时加 `scope:'tiktok-session'`。输出 owner、token 及 Source 检查点，不读取凭证。
@@ -35,7 +35,7 @@ recovery = [projectName:'GooseMarket', scope:'project',
   action:'release-stale-lock',
   expectedOwner:'填写检查输出的 owner', expectedToken:'填写检查输出的 token',
   reason:'已确认对应构建终止，且无进程继续访问项目']
-evaluate(new File('D:/Jenkins/shared-library/tools/recover.groovy'))
+evaluate(new File('D:/Jenkins/july-jenkins-library/tools/recover.groovy'))
 ```
 
 抖音 CLI 会话残留锁改为 `scope:'tiktok-session'`，还要确认没有遗留 tmg/tt-wasmsplit-ci 进程。工具在锁目录保存恢复备份，校验路径、owner、token 后才释放。
@@ -49,7 +49,7 @@ recovery = [projectName:'GooseMarket', platform:'WeChat', coreVersion:'1.6.0', s
   action:'retry-unapplied-operation', operation:'upload-1',
   expectedOwner:'填写操作记录中的 owner', confirmNoRemoteEffect:true,
   reason:'已核对平台没有本次上传，允许重试']
-evaluate(new File('D:/Jenkins/shared-library/tools/recover.groovy'))
+evaluate(new File('D:/Jenkins/july-jenkins-library/tools/recover.groovy'))
 ```
 
 操作名必须从检查输出复制，例如 collect-1、finalize-1、upload-1。工具获取项目锁、备份完整状态，删除指定 STARTED 标记并追加管理员恢复记录，不修改 Source 基线，不触发构建。

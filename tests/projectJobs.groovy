@@ -19,7 +19,7 @@ def initializer = new GroovyShell(this.class.classLoader,new Binding([
     assert parsed.definition.sandbox.text() == 'true'
     assert parsed.disabled.text() == 'false'
     def captured
-    def script = parsed.definition.script.text().replace("@Library('unity-minigame') _",'')
+    def script = parsed.definition.script.text().replace("@Library('july-jenkins-library') _",'')
     new GroovyShell(new Binding([unityMiniGamePipeline:{ Map cfg -> captured=cfg }])).evaluate(script)
     assert captured.coreVersion == '99.99.99' && captured.buildType == 'FullBuild'
     assert captured.projectName == project && captured.platforms == platformList

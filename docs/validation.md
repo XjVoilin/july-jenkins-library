@@ -5,7 +5,7 @@
 在 PowerShell 执行（不调用 Jenkins Job、Unity、平台服务或通知）：
 
 ```powershell
-& 'D:/Jenkins/shared-library/tests/run.ps1' `
+& 'D:/Jenkins/july-jenkins-library/tests/run.ps1' `
   -Java 'D:/Install/JDK21/bin/java.exe' `
   -JenkinsHome 'D:/Jenkins' `
   -WarDir 'C:/Users/admin/AppData/Local/Jenkins/war' `
@@ -35,7 +35,7 @@
 
 ```groovy
 verification = [projectName:'GooseMarket', coreVersion:'1.6.0']
-evaluate(new File('D:/Jenkins/shared-library/tools/verifyJenkins.groovy'))
+evaluate(new File('D:/Jenkins/july-jenkins-library/tools/verifyJenkins.groovy'))
 ```
 
 检查热更和 CodeSplit 只有一份参数属性，Source 不依赖 jenkinsProject，首次加载和操作/平台切换均可计算。无可用 Source 是正常提示，读取失败不是。

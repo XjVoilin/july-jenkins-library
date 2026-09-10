@@ -58,7 +58,9 @@ CodeSplit 的采集、正式分包和上传分别记录 STARTED/DONE 检查点�
 
 参见 [验证步骤](docs/validation.md) 和 [失败恢复](docs/recovery.md)。
 
-本机 Jenkins 共享库 `unity-minigame` 从 `file:///D:/Jenkins/shared-library` 的 `master` 读取。只有提交进入 master 后，新启动的构建才会加载新代码；无需从磁盘重新加载 Jenkins 配置。已经运行的构建不会中途切换库版本。
+共享库名称统一为 `july-jenkins-library`，Job 使用 `@Library('july-jenkins-library') _`。Jenkins 的 Modern SCM / Git 地址为 `https://github.com/XjVoilin/july-jenkins-library.git`，默认版本为 `main`（正式环境也可固定验收后的提交或 tag）。新构建从 GitHub 加载；本地修改需提交并推送，已经运行的构建不会中途切换库版本。
+
+正式维护目录使用 `D:/Jenkins/july-jenkins-library`。该目录用于修改、测试、提交，以及运行管理员工具，不要求 Jenkins 从本地目录加载。多台独立打包机可以使用同一 GitHub 仓库，但各自配置工具、凭据和 BuildFarm。详见 [GitHub 接入](docs/github.md)。
 
 已有项目/版本 Job 不需要重建。运行时会同步参数定义，新建 Job 使用同一份定义生成 XML。涉及新项目 Source 脚本时仍可能需要管理员审批；不自动批准所有脚本。
 

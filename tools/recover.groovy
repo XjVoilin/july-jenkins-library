@@ -8,7 +8,7 @@ j.checkPermission(Jenkins.ADMINISTER)
 def project=cfg.projectName?.toString()
 assert project ==~ /[A-Za-z0-9][A-Za-z0-9_.-]*/ : 'projectName required'
 def loader=new GroovyClassLoader(this.class.classLoader)
-loader.addClasspath(new File((cfg.libraryRoot ?: 'D:/Jenkins/shared-library').toString(),'src').path)
+loader.addClasspath(new File((cfg.libraryRoot ?: 'D:/Jenkins/july-jenkins-library').toString(),'src').path)
 def store=loader.loadClass('org.july.release.ReleaseStorage')
 def farm=new File((cfg.buildFarmRoot ?: 'D:/BuildFarm').toString())
 def root=store.inside(farm,new File(farm,project))
