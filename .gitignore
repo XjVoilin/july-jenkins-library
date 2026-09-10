@@ -1,0 +1,5 @@
+# Windows security database accidentally generated during local maintenance.
+/secedit.sdb
+/secedit.jfm
+/.test-runtime/
+/.test-output/
