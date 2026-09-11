@@ -35,6 +35,22 @@ def wxSource = new File(farm,'ProjectA/ReleaseSources/WeChat/1.6.0/1/code-split-
 assert ReleaseStorage.read(wxSource).state=='SOURCE_READY'
 assert ReleaseStorage.read(wxSource).schemaVersion==6 && ReleaseStorage.read(wxSource).buildTarget=='MiniGame'
 assert new File(wx.outputAot).canonicalFile==new File(wxSource.parentFile,'aot').canonicalFile
+// A failure after the upload receipt must be completable without rebuilding or uploading again.
+def pending = harness.runBuild('FinishOnly','WeChat','1',false,null,'CompletePublication')
+assert pending.failure
+def pendingState = new File(farm,'FinishOnly/ReleaseSources/WeChat/1.6.0/1/code-split-state.json')
+assert ReleaseStorage.read(pendingState).state == 'SNAPSHOTTED'
+assert ReleaseStorage.read(pendingState).operations['full-upload'].status == 'DONE'
+int uploadsBeforeCompletion = harness.uploads
+int commandsBeforeCompletion = pending.commands.size()
+pending.completeFull(pendingState.path)
+assert ReleaseStorage.read(pendingState).state == 'SOURCE_READY'
+assert harness.uploads == uploadsBeforeCompletion
+assert !pending.commands.drop(commandsBeforeCompletion).any { it.contains('fixture-unity') }
+pending.completeFull(pendingState.path)
+assert harness.uploads == uploadsBeforeCompletion
+assert ReleaseStorage.read(pendingState).releaseUploadedByBuild == 1
+
 def tt = harness.runBuild('ProjectA','TikTok','2')
 assert !tt.failure : tt.failure
 def b = harness.runBuild('ProjectB','WeChat','1')
@@ -383,7 +399,7 @@ class FlowHarness {
                 if(aotFault=='late-failure') throw new IOException('framework failed after publishing AOT')
                 if(params.BUILD_MINIGAME) {
                     def sub=params.PLATFORM=='TikTok'?'tt-minigame':'minigame'
-                    def output=new File(farm,project+'/Build/'+params.PLATFORM+'/'+cfg.coreVersion+'/'+sub+'/wasmcode')
+                    def output=new File(farm,project+'/Framework Exports/'+params.PLATFORM+'/'+cfg.coreVersion+'/'+sub+'/wasmcode')
                     output.mkdirs();new File(output,md5+'.wasm').text='wasm'
                 }
             }
@@ -398,13 +414,29 @@ class FlowHarness {
                 // Jenkins 只传递基线；此模拟器不实现框架自己的 AOT 恢复。
                 if(aotFault=='mutate-input') new File(aot,'framework-owned.fixture').text='changed'
             }
+            if(cmd.contains('fixture-unity') && (cmd.contains('Example.FullBuild') || cmd.contains('Example.HotUpdateBuild'))) {
+                assert cmd.contains('-uploadCdn')
+                def argument = { flag -> def match=cmd =~ /${flag}\s+([^\s]+)/; assert match.find(); match.group(1) }
+                boolean full=cmd.contains('Example.FullBuild')
+                String platform=argument('-platform')
+                def packageDir=full && params.BUILD_MINIGAME ? new File(farm,project+'/Framework Exports/'+platform+'/'+cfg.coreVersion+'/'+(platform=='TikTok'?'tt-minigame':'minigame')).path : ''
+                if(packageDir) new File(packageDir,'game.js').text='fixture'
+                def report=[schemaVersion:1,succeeded:true,cdnUploaded:true,
+                    buildType:full?'FullBuild':'HotUpdateBuild',platform:platform,buildTarget:'MiniGame',
+                    environment:argument('-env'),coreVersion:cfg.coreVersion,planVersion:argument('-planVersion'),
+                    debug:cmd.contains('-debug'),packageDirectory:packageDir,
+                    aotBackupPath:full?result.outputAot:result.inputAot,cdnUrl:'https://cdn.example/'+project]
+                localFile('release-build-result.json').text=JsonOutput.toJson(report)
+            }
             if(map.returnStatus) return 0
             if(cmd.contains('git rev-parse HEAD')) return commit
             ''
         })
-        ['releaseProject','releaseCredentials','releaseParameters','releaseState','unityMiniGameSourceScript'].each { module ->
+        ['releaseProject','releaseCredentials','releaseParameters','releaseState','unityMiniGameSourceScript','releaseUnityResult','releaseGitTag'].each { module ->
             binding.setVariable(module,shell.parse(new File(repo,'vars/'+module+'.groovy')))
         }
+        result.completeFull = { String path -> binding.getVariable('releaseGitTag').completeFull(path) }
+        result.completeResources = { String path -> binding.getVariable('releaseGitTag').completeResources(path) }
         def stateModule = binding.getVariable('releaseState')
         binding.setVariable('releaseState',[
             once:{path,operation,body->stateModule.once(path,operation,body)},

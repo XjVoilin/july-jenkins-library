@@ -86,7 +86,7 @@ class ReleaseStorage {
         def state = read(file)
         ['schemaVersion','buildTarget','projectName','platform','version','sourceBuildNumber','rawPackagePath',
          'rawWasmMd5','packageFingerprint','aotBackupPath','aotBackupFingerprint',
-         'buildEnvironment','debug','sourceGitCommit'].each { key ->
+         'buildEnvironment','debug','sourceGitCommit','releaseTag'].each { key ->
             if (changes.containsKey(key) && changes[key] != state[key]) {
                 throw new IllegalArgumentException("禁止修改 Source 基线字段: $key")
             }

@@ -312,7 +312,7 @@ def call(Map config) {
             stage('Guard') {
                 when {
                     expression {
-                        return (isHotUpdate || p('ENV') == 'Prod') && !p('FORCE_REBUILD')
+                        return coreVersion != '99.99.99' && (isHotUpdate || p('ENV') == 'Prod') && !p('FORCE_REBUILD')
                     }
                 }
                 steps {
@@ -333,31 +333,6 @@ def call(Map config) {
             }
 
             stage('SyncDefines') {
-                when {
-                    expression {
-                        def settings = readFile('ProjectSettings/ProjectSettings.asset')
-                        def platform = p('PLATFORM')
-                        def platformDefine = platform == 'TikTok' ? 'JULYGF_DY_MINIGAME' : 'JULYGF_WX_MINIGAME'
-
-                        // 只检查 WeixinMiniGame 行（Tuanjie BuildTargetGroup.MiniGame 对应的实际 target）
-                        def lines = settings.split('\\n')
-                        def activeLine = lines.find { it.trim().startsWith('WeixinMiniGame:') }
-                        if (!activeLine) {
-                            echo '[SyncDefines] WeixinMiniGame defines not found, will sync'
-                            return true
-                        }
-
-                        def needsPlatform = !activeLine.contains(platformDefine)
-                        def hasDebug = activeLine.contains('JULYGF_DEBUG')
-                        def wantDebug = p('DEBUG') ? true : false
-                        def needsDebug = (wantDebug != hasDebug)
-
-                        if (!needsPlatform && !needsDebug) {
-                            echo "[SyncDefines] Defines already match (${platformDefine}${wantDebug ? ' + JULYGF_DEBUG' : ''}), skipping"
-                        }
-                        return needsPlatform || needsDebug
-                    }
-                }
                 steps {
                     script {
                         def args = [
@@ -387,19 +362,7 @@ def call(Map config) {
                         def planVersion = isHotUpdate ? p('PLAN_VERSION') : coreVersion
                         def method = "${config.buildClass}.${buildType}"
 
-                        if (!isHotUpdate && p('BUILD_MINIGAME')) {
-                            // 代码分包工具会原地写入 profile/release 文件。全量小游戏出包前必须清理
-                            // 当前平台/版本目录，避免普通正式包混入上一次分包产物。
-                            def buildRoot = new File(projectBuildRoot).canonicalPath
-                            def exportDir = new File(
-                                "${buildRoot}\\${p('PLATFORM')}\\${coreVersion}").canonicalPath
-                            def allowedPrefix = buildRoot.toLowerCase() + File.separator
-                            if (!exportDir.toLowerCase().startsWith(allowedPrefix)) {
-                                error "[Build] 拒绝清理 Build 根目录之外的路径: ${exportDir}"
-                            }
-                            echo "[Build] 清理旧小游戏导出目录: ${exportDir}"
-                            bat "@if exist \"${exportDir}\" rmdir /s /q \"${exportDir}\""
-                        }
+                        releaseUnityResult.clear()
 
                         def args = [
                             "\"${unityPath}\"",
@@ -410,6 +373,7 @@ def call(Map config) {
                             '-executeMethod', method,
                             '-platform', p('PLATFORM'),
                             '-planVersion', planVersion,
+                            '-uploadCdn',
                             '-env', p('ENV'),
                         ]
 
@@ -439,8 +403,8 @@ def call(Map config) {
 
                         if (config.extraArgs) {
                             def extra = config.extraArgs()
-                            if (extra.any { it.toString() =~ /(?i)(?:^|\s)["']?-aotBackup(?:InputPath|OutputPath|Version)["']?(?:\s|=|$)/ }) {
-                                error 'extraArgs 禁止覆盖 Jenkins 管理的 AOT 路径或版本断言'
+                            if (extra.any { it.toString() =~ /(?i)(?:^|\s)["']?-(?:aotBackup(?:InputPath|OutputPath|Version)|platform|env|planVersion|miniGame|uploadCdn|forceRebuild|debug|development|buildTarget|executeMethod|projectPath)["']?(?:\s|=|$)/ }) {
+                                error 'extraArgs 禁止覆盖 Jenkins 管理的构建参数'
                             }
                             args.addAll(extra)
                         }
@@ -451,6 +415,25 @@ def call(Map config) {
                         releaseCredentials.withGitAuthentication() {
                             withEnv(unityProxyEnv) { bat cmd }
                         }
+                    }
+                }
+            }
+
+            stage('ReadUnityResult') {
+                steps {
+                    script {
+                        def result = releaseUnityResult.read([
+                            buildType:buildType, platform:p('PLATFORM'), environment:p('ENV'),
+                            coreVersion:coreVersion, planVersion:isHotUpdate ? p('PLAN_VERSION') : coreVersion,
+                            debug:p('DEBUG') ? true : false, player:!isHotUpdate && p('BUILD_MINIGAME'),
+                            aotBackupPath:isHotUpdate ? env.HOTUPDATE_AOT_SNAPSHOT : env.AOT_BACKUP_OUTPUT_PATH])
+                        env.UNITY_PACKAGE_DIRECTORY = result.packageDirectory ?: ''
+                        def plan = releaseGitTag.plan([
+                            buildType:buildType, platform:result.platform, environment:result.environment,
+                            coreVersion:result.coreVersion, planVersion:result.planVersion,
+                            cdnUrl:result.cdnUrl, buildNumber:env.BUILD_NUMBER, buildUrl:env.BUILD_URL])
+                        writeFile file:'release-publication.json', text:groovy.json.JsonOutput.toJson([
+                            schemaVersion:1, unity:result, tag:plan])
                     }
                 }
             }
@@ -485,9 +468,7 @@ def call(Map config) {
                     script {
                         def platform = p('PLATFORM')
                         def subDir = platform == 'TikTok' ? 'tt-minigame' : 'minigame'
-                        def buildRoot = new File(projectBuildRoot).canonicalPath
-                        def packageDir = new File(
-                            "${buildRoot}\\${platform}\\${coreVersion}\\${subDir}").canonicalPath
+                        def packageDir = env.UNITY_PACKAGE_DIRECTORY
                         def sourceRoot = env.RESERVED_SOURCE_ROOT
                         if (!sourceRoot || !fileExists(sourceRoot)) error 'Source 目录未预留'
                         def rawDir = "${sourceRoot}\\raw\\${subDir}"
@@ -520,6 +501,7 @@ def call(Map config) {
                         def gitCommit = bat(script: '@git rev-parse HEAD', returnStdout: true).trim()
                         ReleaseStorage.writeAtomic(new File(stateFile), [
                             schemaVersion: 6,
+                            releaseTag: readJSON(file:'release-publication.json', returnPojo: true).tag,
                             buildTarget: 'MiniGame',
                             projectName: projectName,
                             state: 'SNAPSHOTTED',
@@ -556,39 +538,34 @@ def call(Map config) {
                     script {
 
                         def platform = p('PLATFORM')
-                        def subDir = platform == 'TikTok' ? 'tt-minigame' : 'minigame'
                         def context = [farmRoot:buildFarmRoot,secretsRoot:projectSecretsRoot.path,
-                            packageDir:"${projectBuildRoot}\\${platform}\\${coreVersion}\\${subDir}",
+                            packageDir:env.UNITY_PACKAGE_DIRECTORY,
                             version:coreVersion,description:"v${coreVersion} #${env.BUILD_NUMBER} ${buildType}",
                             appId:localWechatAppId,uploadKey:localWechatUploadKeyPath,robot:uploadRobot,
                             projectName:projectName]
-                        if (platform == 'WeChat') releaseWeChat.upload(context)
-                        else releaseTikTok.upload(context)
+                        releaseState.once(env.RELEASE_SOURCE_STATE_FILE, 'full-upload') {
+                            if (platform == 'WeChat') releaseWeChat.upload(context)
+                            else releaseTikTok.upload(context)
+                            return [build:env.BUILD_NUMBER.toInteger(), url:env.BUILD_URL]
+                        }
                     }
                 }
             }
 
-            stage('MarkReleaseSourceReady') {
-                when {
-                    expression {
-                        return !isHotUpdate && p('BUILD_MINIGAME')
-                    }
-                }
+            stage('CompletePublication') {
                 steps {
                     script {
-                        def stateFile = env.RELEASE_SOURCE_STATE_FILE ?: ''
-                        if (!stateFile || !fileExists(stateFile)) {
-                            error '[ReleaseSource] 上传完成但找不到原包状态文件'
+                        releaseCredentials.withGitAuthentication() {
+                            if (!isHotUpdate && p('BUILD_MINIGAME')) {
+                                releaseGitTag.completeFull(env.RELEASE_SOURCE_STATE_FILE)
+                            } else {
+                                releaseGitTag.completeResources('release-publication.json')
+                            }
                         }
-                        releaseState.update(stateFile, [
-                            state: 'SOURCE_READY',
-                            releaseUploadedByBuild: env.BUILD_NUMBER as int,
-                            releaseUploadBuildUrl: env.BUILD_URL
-                        ])
-                        echo '[ReleaseSource] 普通 release 已上传，原包可供独立 CodeSplit Job 后续处理'
                     }
                 }
             }
+
         }
 
         post {
@@ -598,7 +575,7 @@ def call(Map config) {
             always {
                 script {
                     if (projectLease) {
-                        archiveArtifacts artifacts: 'build.log', allowEmptyArchive: true
+                        archiveArtifacts artifacts: 'build.log,sync_defines.log,release-build-result.json,release-publication.json', allowEmptyArchive: true
                         releaseParameters.save(visibleParams(), savedParamsFile, p)
                         releaseParameters.sync(visibleParams(), savedParamsFile)
                     }
