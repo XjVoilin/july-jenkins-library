@@ -243,9 +243,9 @@ def call(Map config) {
                         int cycle = restart ? ((before.collectionCycle ?: 1) as int) + 1 : 1
                         def context = splitContext + [restart:restart,
                             refRoot:"${codeSplitCacheRoot}\\${env.CODE_SPLIT_PLATFORM}"]
-                        releaseState.once(env.SPLIT_STATE_FILE, "collect-${cycle}") {
-                            if (env.CODE_SPLIT_PLATFORM == 'WeChat') releaseWeChat.prepare(context)
-                            else releaseTikTok.prepare(context)
+                        releaseState.oncePrepared(env.SPLIT_STATE_FILE, "collect-${cycle}") { start ->
+                            if (env.CODE_SPLIT_PLATFORM == 'WeChat') { start(); releaseWeChat.prepare(context) }
+                            else releaseTikTok.prepare(context, start)
                             return [prepared:true]
                         }
                         releaseState.update(env.SPLIT_STATE_FILE, [
@@ -335,9 +335,9 @@ def call(Map config) {
                     script {
                         def context = splitContext + [packageDir:env.RELEASE_PACKAGE_DIR,
                             description:"v${env.CODE_SPLIT_VERSION} FullBuild#${env.SOURCE_BUILD_NUMBER} CodeSplit"]
-                        def receipt = releaseState.once(env.SPLIT_STATE_FILE, "upload-${env.COLLECTION_CYCLE}") {
-                            if (env.CODE_SPLIT_PLATFORM == 'WeChat') releaseWeChat.upload(context)
-                            else releaseTikTok.upload(context)
+                        def receipt = releaseState.oncePrepared(env.SPLIT_STATE_FILE, "upload-${env.COLLECTION_CYCLE}") { start ->
+                            if (env.CODE_SPLIT_PLATFORM == 'WeChat') { start(); releaseWeChat.upload(context) }
+                            else releaseTikTok.upload(context, start)
                             return [build:env.BUILD_NUMBER, url:env.BUILD_URL]
                         }
                         // 上传回执先落盘。参考版本写入失败后可重试，不再重复 dosplit/upload。

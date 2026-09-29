@@ -105,11 +105,15 @@ class ReleaseStorage {
     @NonCPS static Map begin(File file, String key, String owner) {
         beginOperation(file, key, owner, false)
     }
+    /** 只检查既有记录；登录和本地准备期间不写 STARTED。调用方持有项目锁。 */
+    @NonCPS static Map check(File file, String key) {
+        beginOperation(file, key, null, false, false)
+    }
     /** 仅正式分包允许重做；调用方必须持有项目锁，平台适配器从干净副本执行 dosplit。 */
     @NonCPS static Map beginFinalization(File file, String key, String owner) {
         beginOperation(file, key, owner, true)
     }
-    @NonCPS private static Map beginOperation(File file, String key, String owner, boolean retryFinalization) {
+    @NonCPS private static Map beginOperation(File file, String key, String owner, boolean retryFinalization, boolean start = true) {
         def state = read(file)
         Map operations = state.operations ?: [:]
         def previous = operations[key]
@@ -128,6 +132,7 @@ class ReleaseStorage {
         if (previous && previous.status != 'STARTED') {
             throw new IllegalStateException("未知操作状态，拒绝覆盖: $key")
         }
+        if (!start) return [done:false]
         long now = new Date().time
         def next = [status:'STARTED', owner:owner, startedAt:now]
         if (previous) {

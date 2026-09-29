@@ -96,4 +96,38 @@ assert ReleaseStorage.read(state).operations['finalize-1'].previousAttempts*.own
 assert use(Continuable.categories) { retrying.run(null) }=='retried'
 assert ReleaseStorage.read(state).operations['finalize-1'].owner=='test/cps-retry'
 assert ReleaseStorage.read(state).operations['finalize-1'].status=='DONE'
+// Preparation can fail or be interrupted before STARTED, including in real CPS execution.
+ReleaseStorage.writeAtomic(state,[state:'UPLOADED',platform:'TikTok',collectionCycle:1])
+binding.setVariable('failLogin',true)
+def preparedEntry='''
+import com.cloudbees.groovy.cps.Continuable
+binding.setVariable('bat', { settings -> settings.returnStatus ? (failLogin ? -1073740791 : 0) : 'OK' })
+releaseState.oncePrepared(statePath,'collect-2') { start ->
+    releaseTikTok.withSession([farmRoot:root]) {
+        Continuable.suspend('local-prepared')
+        start()
+        Continuable.suspend('remote-dispatched')
+        [prepared:true]
+    }
+}
+'''
+def beforeLogin=state.text
+try { use(Continuable.categories) { new Continuable(shell.parse(preparedEntry)).run(null) };assert false }
+catch(java.lang.reflect.InvocationTargetException expected) { assert expected.cause instanceof IllegalArgumentException }
+assert state.text==beforeLogin && !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+binding.setVariable('failLogin',false)
+def prepared=new Continuable(shell.parse(preparedEntry))
+assert use(Continuable.categories) { prepared.run(null) }=='local-prepared'
+assert state.text==beforeLogin && new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+try { use(Continuable.categories) { prepared.runByThrow(new org.jenkinsci.plugins.workflow.steps.FlowInterruptedException(hudson.model.Result.ABORTED,true)) };assert false }
+catch(java.lang.reflect.InvocationTargetException expected) { assert expected.cause.result==hudson.model.Result.ABORTED }
+assert state.text==beforeLogin && !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+prepared=new Continuable(shell.parse(preparedEntry))
+assert use(Continuable.categories) { prepared.run(null) }=='local-prepared'
+assert use(Continuable.categories) { prepared.run(null) }=='remote-dispatched'
+assert ReleaseStorage.read(state).operations['collect-2'].status=='STARTED'
+assert new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+assert use(Continuable.categories) { prepared.run(null) }.prepared
+assert ReleaseStorage.read(state).operations['collect-2'].status=='DONE'
+assert !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
 println 'PASS CPS: actual CpsTransformer/Continuable; suspend/resume; module calls; abort cleanup; uncertain checkpoint retained'

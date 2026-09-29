@@ -10,8 +10,9 @@ def withSession(Map c, Closure work) {
         }
     } finally { ReleaseStorage.release(lease) }
 }
-def upload(Map c) {
+def upload(Map c, Closure start = {}) {
     withSession(c) {
+        start()
         releaseFiles.runCheckedBat('抖音正式包上传',
             'tmg upload "'+c.packageDir+'" -v "'+c.version+'" -c "'+c.description+'"',['Upload success'])
     }
@@ -31,15 +32,15 @@ def finalizePackage(Map c) {
     }
 }
 
-def prepare(Map c) {
-    // 抖音 prepare 包始终由不可变原包生成；再次采集时引用最近正式分包版本。
-    releaseFiles.mirrorManagedDirectory(c.raw, c.collection, 'collection', c.sources)
-    def refVersion = releaseSplitMetrics.readReference("${c.refRoot}\\last_split_version")
-    echo "[CodeSplit] 抖音增量分包参考版本: ${refVersion ?: '未使用'}"
+def prepare(Map c, Closure start = {}) {
     withSession(c) {
+        // 登录与平台操作之间持续持锁；本地准备完成后才记录 STARTED。
+        releaseFiles.mirrorManagedDirectory(c.raw, c.collection, 'collection', c.sources)
+        def refVersion = releaseSplitMetrics.readReference("${c.refRoot}\\last_split_version")
+        echo "[CodeSplit] 抖音增量分包参考版本: ${refVersion ?: '未使用'}"
         def initCmd = "tt-wasmsplit-ci init -p \"${c.collection}\" -i ${c.ttAppId} -m \"v${c.version}#${c.sourceBuild}\""
         if (refVersion) { initCmd += " -r ${refVersion}" }
+        start()
         releaseFiles.runCheckedBat('抖音 prepare 包生成', initCmd)
     }
-
 }

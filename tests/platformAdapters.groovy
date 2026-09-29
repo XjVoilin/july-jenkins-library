@@ -1,6 +1,9 @@
 def repo = new File(args[0])
 def temp = File.createTempDir('release-adapters-', '')
 def commands=[]
+def checkpointFile = new File(temp,'checkpoint.json')
+boolean checkOrder=false, failLocal=false, failInit=false
+def store=org.july.release.ReleaseStorage
 boolean failLogin=false
 boolean failUpload=false
 boolean failFinalize=false
@@ -14,13 +17,23 @@ def binding=new Binding([env:[BUILD_URL:'test/adapter'],echo:{m->},
     bat:{arg->
         def text=arg instanceof Map?arg.script.toString():arg.toString()
         commands<<text
+        if(checkOrder) {
+            def checkpoint=store.read(checkpointFile).operations?.'collect-2'
+            if(text.contains('tmg login-e') || text.contains('robocopy ')) assert !checkpoint
+            if(text.contains('tt-wasmsplit-ci init')) {
+                assert checkpoint.status=='STARTED'
+                assert new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+            }
+            if(failLocal && text.contains('robocopy ')) throw new IOException('local preparation failed')
+            if(failInit && text.contains('tt-wasmsplit-ci init')) throw new IOException('remote outcome unknown')
+        }
         if(failLogin && text.contains('tmg login-e')) return -1073740791
         if(failUpload && text.contains('tmg upload')) throw new IOException('mock CLI failure')
         if(failFinalize && text.contains(' dosplit ')) throw new IOException('mock download failure')
         arg instanceof Map && arg.returnStatus ? 0 : 'Upload success\ncurrent split version: 7'
     }])
 def shell=new GroovyShell(this.class.classLoader,binding)
-['releaseCredentials','releaseFiles','releaseSplitMetrics','releaseWeChat','releaseTikTok'].each {name->
+['releaseState','releaseCredentials','releaseFiles','releaseSplitMetrics','releaseWeChat','releaseTikTok'].each {name->
     binding.setVariable(name,shell.parse(new File(repo,'vars/'+name+'.groovy')))
 }
 binding.setVariable('releaseJenkinsSecrets',[withPair:{kind,first,second,body->
@@ -86,6 +99,40 @@ try { binding.releaseTikTok.prepare(tt); assert false }
 catch(IllegalStateException expected) { assert expected.message.contains('0xC0000409') }
 assert !commands.any { it.contains('tt-wasmsplit-ci init') }
 assert !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+// Real adapter and checkpoint wrapper: login/local errors write nothing; remote errors retain STARTED.
+checkOrder=true
+failLogin=false
+failUpload=false
+def baseline=[state:'UPLOADED',platform:'TikTok',collectionCycle:1]
+store.writeAtomic(checkpointFile,baseline)
+def prepareOnce = {
+    binding.releaseState.oncePrepared(checkpointFile.path,'collect-2') { start ->
+        binding.releaseTikTok.prepare(tt,start)
+        [prepared:true]
+    }
+}
+['login','local'].each { failure ->
+    def before=checkpointFile.text
+    failLogin=failure=='login';failLocal=failure=='local'
+    try { prepareOnce();assert false } catch(IllegalStateException | IOException expected) {}
+    assert checkpointFile.text==before
+    assert !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+}
+failLogin=false;failLocal=false
+assert prepareOnce().prepared
+assert store.read(checkpointFile).operations.'collect-2'.status=='DONE'
+commands.clear();failLogin=true
+assert prepareOnce().prepared && commands.empty // DONE bypasses login and mirroring entirely.
+failLogin=false
+store.writeAtomic(checkpointFile,baseline)
+failInit=true
+try { prepareOnce();assert false } catch(IOException expected) {}
+assert store.read(checkpointFile).operations.'collect-2'.status=='STARTED'
+commands.clear();failInit=false
+try { prepareOnce();assert false } catch(IllegalStateException expected) {}
+assert commands.empty // Unknown outcome is rejected before login or local mutation.
+assert !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+checkOrder=false
 // Exit-code-zero failures and missing success markers must still fail closed.
 binding.setVariable('bat',{args->'Error: mock failure'})
 try {binding.releaseFiles.runCheckedBat('fixture','unused');assert false}catch(IllegalStateException expected){}

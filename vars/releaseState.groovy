@@ -7,6 +7,14 @@ def once(String path, String operation, Closure work) {
     runOperation(path, operation, checkpoint, work)
 }
 
+/** work 在准备完成、发出首个平台命令前调用 start；准备失败不产生检查点。 */
+def oncePrepared(String path, String operation, Closure work) {
+    def checkpoint = ReleaseStorage.check(new File(path), operation)
+    runOperation(path, operation, checkpoint) {
+        work { ReleaseStorage.begin(new File(path), operation, env.BUILD_URL ?: env.BUILD_TAG) }
+    }
+}
+
 def finalizePackage(String path, String operation, Closure work) {
     def checkpoint = ReleaseStorage.beginFinalization(new File(path), operation, env.BUILD_URL ?: env.BUILD_TAG)
     if (checkpoint.retriedOwner) {

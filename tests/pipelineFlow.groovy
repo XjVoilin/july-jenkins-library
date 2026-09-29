@@ -258,6 +258,24 @@ assert !new File(farm,'ProjectA/AOTBackup').exists()
     assert uploadUnknown.failure?.message?.contains('未确认')
     assert harness.finals==finalCount && harness.uploads==uploadCount+1
 }
+// Same source/action retries after login failure without creating a failed checkpoint.
+assert !harness.runBuild('LoginRetry','TikTok','1').failure
+def loginSource = new File(farm,'LoginRetry/ReleaseSources/TikTok/1.6.0/1/code-split-state.json')
+def beforeLogin=loginSource.text
+harness.loginFailureStage='StartCollection'
+assert harness.runSplit('LoginRetry','TikTok','1','SOURCE_READY','启动代码分包采集').failure
+assert loginSource.text==beforeLogin
+harness.loginFailureStage=null
+assert !harness.runSplit('LoginRetry','TikTok','1','SOURCE_READY','启动代码分包采集').failure
+harness.loginFailureStage='UploadRelease'
+int uploadedBeforeLogin=harness.uploads
+assert harness.runSplit('LoginRetry','TikTok','1','COLLECTING','生成正式分包并上传').failure
+assert !ReleaseStorage.read(loginSource).operations['upload-1'] && harness.uploads==uploadedBeforeLogin
+int finalizedBeforeRetry=harness.finals
+harness.loginFailureStage=null
+assert !harness.runSplit('LoginRetry','TikTok','1','COLLECTING','生成正式分包并上传').failure
+assert harness.finals==finalizedBeforeRetry && harness.uploads==uploadedBeforeLogin+1
+assert ReleaseStorage.read(loginSource).state=='UPLOADED'
 println "PASS pipeline flow: $harness.runs runs; projects/platforms; full/hot/split; explicit AOT paths; no AOT copy; failed publication; old/tampered/foreign Source; argument guards; JSONNull; recollection and finalization retries; upload uncertainty blocked"
 println "Fixtures: $farm"
 
@@ -267,6 +285,7 @@ class FlowHarness {
     boolean failReference=false, failUpload=false, failCollectionState=false
     String aotFault=null
     String credentialFault=null
+    String loginFailureStage=null
     String finalizationFault=null
     String commit='a'*40
     String md5='0123456789abcdef'
@@ -440,6 +459,7 @@ class FlowHarness {
         def stateModule = binding.getVariable('releaseState')
         binding.setVariable('releaseState',[
             once:{path,operation,body->stateModule.once(path,operation,body)},
+            oncePrepared:{path,operation,body->stateModule.oncePrepared(path,operation,body)},
             finalizePackage:{path,operation,body->stateModule.finalizePackage(path,operation,body)},
             update:{path,changes->
                 if(failCollectionState && changes.state=='COLLECTING')
@@ -459,7 +479,12 @@ class FlowHarness {
             }
         ])
         def platformAdapter=[
-            prepare:{c->preparations++;copyTree(c.raw,c.collection)},
+            prepare:{c,start=null->
+                if(loginFailureStage==current) throw new IOException('login failed')
+                copyTree(c.raw,c.collection)
+                if(start) start()
+                preparations++
+            },
             finalizePackage:{c->
                 finals++
                 def release=new File(c.release)
@@ -473,7 +498,11 @@ class FlowHarness {
                 }
                 '7'
             },
-            upload:{c->uploads++;if(failUpload)throw new IOException('remote result unknown')},
+            upload:{c,start=null->
+                if(loginFailureStage==current) throw new IOException('login failed')
+                if(start) start()
+                uploads++;if(failUpload)throw new IOException('remote result unknown')
+            },
             preview:{c->localFile('preview_qr.jpg').text='fake'},
             withSession:{c,body->body()}
         ]
