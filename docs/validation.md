@@ -26,7 +26,7 @@
 - platformAdapters：真实适配器配合模拟命令，检查平台身份、robot 参数、CLI 成功标记及失败后的会话锁释放；确认两平台重试仍调用官方 dosplit，每次仅重建 release，微信来自 collection、抖音来自 raw，不调用 init/upload。
 - loginDiagnostics：真实 Windows 批处理模拟登录成功、崩溃退出（0xC0000409）、空输出及零退出码错误；验证 stdout/stderr 留存到控制台、账号密码脱敏、退出码/耗时及原始临时日志清理。不调用抖音平台。
 - cpsExecution：真实 CpsTransformer/Continuable，挂起/恢复、共享模块调用、检查点复用与异常清理；模拟正式分包挂起后中断、新执行再次挂起/恢复、尝试历史保存和 DONE 复用，上传中断仍保持未知状态。
-- pipelineFlow：真实流水线阶段配合模拟 Jenkins/Unity/平台接口；76 次运行覆盖多项目两平台、全量/热更/分包、冲突及失败重试；包含 QA 固定分支/版本、拒绝参数覆盖版本、两平台各重复全量并分别保存 Source。上传回执与正式分包记录保留原成功任务；凭据未填写时不执行 Git/Unity、不预留 Source；覆盖显式 AOT 输入/输出、框架未输出/空输出/后续失败、输入篡改、旧/跨项目 Source 和参数覆盖拒绝。readJSON 模拟默认返回真实 JSON-lib 对象，仅 returnPojo=true 返回普通 Map/null；覆盖 null 统计再次采集、collect-2 已完成但状态更新失败的重试及第三轮采集，确认不重复远端准备或上传。新增双平台下载/校验/统计失败后的正式分包重试，验证残留清理、raw/aot/collection 不变、原采集记录不变；分包 DONE 后上传前中断可以复用、产物篡改拒绝、未知上传不会再次分包或上传。AOT 内容使用不透明的虚拟文件，不证明真实框架格式正确。
+- pipelineFlow：真实流水线阶段配合模拟 Jenkins/Unity/平台接口；77 次运行覆盖多项目两平台、全量/热更/分包、冲突及失败重试；包含 QA 固定分支/版本、拒绝参数覆盖版本、两平台各重复全量并分别保存 Source。上传回执与正式分包记录保留原成功任务；凭据未填写时不执行 Git/Unity、不预留 Source；覆盖显式 AOT 输入/输出、框架未输出/空输出/后续失败、输入篡改、旧/跨项目 Source 和参数覆盖拒绝。readJSON 模拟默认返回真实 JSON-lib 对象，仅 returnPojo=true 返回普通 Map/null；覆盖 null 统计再次采集、collect-2 已完成但状态更新失败的重试及第三轮采集，确认不重复远端准备或上传。新增双平台下载/校验/统计失败后的正式分包重试，验证残留清理、raw/aot/collection 不变、原采集记录不变；分包 DONE 后上传前中断可以复用、产物篡改拒绝、未知上传不会再次分包或上传。AOT 内容使用不透明的虚拟文件，不证明真实框架格式正确。
 
 这些测试不等于真实 Jenkins Declarative 调度、Unity 构建或平台接口验收。
 
@@ -55,3 +55,6 @@ evaluate(new File('D:/Jenkins/july-jenkins-library/tools/verifyJenkins.groovy'))
 8. 故障重试只在测试环境做：正式分包普通失败后，排除网络/本地故障，再选择同一 Source 和“生成正式分包并上传”；检查日志提示重试、previousAttempts 保留旧任务、没有重复 init，产物校验通过后才上传。平台可能继续旧任务或生成新版本；本次审计的工具版本及行为见 [失败恢复](recovery.md)。上传结果未知仍必须先查平台，DONE 产物篡改仍必须拒绝。不要用断电/强杀真实发版任务来测试。
 
 每次修改后重新运行离线回归；真实 Jenkins 页面交互、新模板创建、Unity 打包、平台真机采集和实际上传需另行验收，不能由离线测试通过推断。
+
+- releaseBuildInterface：实际本地 bare Git 的标签推送失败重试、幂等和冲突拒绝；Unity 结果身份、目录和上传状态严格校验；修改入口的真实 CPS 编译。仅访问临时本地 Git 仓库，不访问远端服务。
+- pipelineFlow 增加成功上传后完成阶段失败的补发验证，保留原上传任务号；模拟 Unity 返回非默认平台输出路径，确保 Jenkins 不再拼接导出位置。

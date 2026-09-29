@@ -25,7 +25,7 @@ Jenkins 只创建 Source 父目录，不预先创建 aot；若 aot 已存在，�
 
 - 框架负责备份内容、内部清单格式、完整性校验、完成后发布最终目录，以及热更工作副本的替换恢复；指定路径失败不得使用其他来源。
 - Jenkins 等待整个 Unity 命令成功退出后，检查指定 aot 是非空目录并记录整体目录指纹。不存在或为空即失败；不解析或虚构框架尚未交付的清单文件名/结构。
-- 普通全量包快照及平台上传完成后，才将 Source 从 SNAPSHOTTED 更新为 SOURCE_READY。只有 AOT 目录或成功日志，不代表 Source 已可用。
+- 普通全量包快照、平台上传及发布标签完成后，才将 Source 从 SNAPSHOTTED 更新为 SOURCE_READY。只有 AOT 目录或成功日志，不代表 Source 已可用。
 - 热更前检查 Source 身份、版本、Git 提交继承关系、精确 AOT 路径和整体指纹；框架执行后再次确认输入快照未被修改。
 - Jenkins 不再复制/恢复 HybridCLRData 内的 AOT，也不读取 ../AOTBackup。保留 git clean 的 HybridCLRData 缓存排除项不代表使用它兜底。
 
@@ -42,3 +42,5 @@ Jenkins 的整体指纹用于发现 Source 被修改；框架清单及逐文件�
 旧 schemaVersion=5 的 Source 不进入新版热更列表，手工提交旧选项也会失败；不原地转换或自动删除旧 Source。CodeSplit 的原包处理流程没有因本次 AOT 对接重写。
 
 本分支不清理真实 AOTBackup、Source 或工作区。额外旧归档应在真实验收通过、确认不再使用后单独清理。
+
+AOT 路径接口保持不变；新构建还须验证 Unity 结果文件，见 [构建接口](build-contract.md)。

@@ -65,3 +65,5 @@ JSONNull 导致的 StackOverflowError 已通过统一 `readJSON returnPojo: true
 ## Source 目录冲突
 
 同一项目/平台/核心版本/全量构建号只能创建一次 Source。即使前次失败留下空预留目录，也不自动覆盖。用新的 Jenkins 构建号重建；不要为了继续打包删除已经存在的正式基线。
+
+全量平台上传已 DONE、标签或 Source 就绪记录失败时，使用 [仅补齐发布](build-contract.md#只补齐发布不重复构建或上传)。不要重跑 FullBuild 或修改快照；STARTED 上传仍需先核对远端。

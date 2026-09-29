@@ -16,7 +16,7 @@ $classpath=@((Join-Path $WarDir 'WEB-INF\lib\*'),(Join-Path $runtime.FullName 'w
     @(Get-ChildItem -LiteralPath (Join-Path $JenkinsHome 'plugins') -File -Recurse -Filter '*.jar' |
       Where-Object {$_.FullName -match '\\WEB-INF\\lib\\'} | Select-Object -ExpandProperty FullName)
 try {
-    foreach($test in @('compileAll','runtime','parameterSchema','projectJobs','sourceChoices','codeSplitParameters','globalSecrets','gitEnvironment','projectSecrets','platformAdapters','loginDiagnostics','cpsExecution','pipelineFlow')) {
+    foreach($test in @('compileAll','runtime','parameterSchema','projectJobs','sourceChoices','codeSplitParameters','globalSecrets','gitEnvironment','projectSecrets','platformAdapters','loginDiagnostics','cpsExecution','pipelineFlow','releaseBuildInterface')) {
         & $Java '-Dfile.encoding=UTF-8' '-Dgroovy.source.encoding=UTF-8' -cp ($classpath -join ';') groovy.ui.GroovyMain (Join-Path $PSScriptRoot ($test+'.groovy')) $repository
         if($LASTEXITCODE -ne 0){throw "Test failed: $test"}
     }

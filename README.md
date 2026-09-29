@@ -6,7 +6,7 @@
 
 - 项目初始化器调用 `unityMiniGameProjectJobs`：创建项目 Folder、`CreateVersionJobs`、`CodeSplit`、`QA` 和项目四文件配置骨架（JSON、两个空微信密钥、COS 模板），不打包。
 - `<项目>/CreateVersionJobs`：输入一次核心版本，使用仓库专用模板创建 `<版本>_FullBuild` 和 `<版本>_HotUpdate`，拒绝覆盖已有 Job。
-- `<项目>/QA`：固定版本 `99.99.99`、分支 `Tuanjie_Build/99.99.99`，复用全量构建流程和参数；不提供版本输入框，不创建 QA 热更 Job。平台、环境、Debug、缓存清理、强制重建及小游戏出包保持可选。上传、Git Tag、Source 归档遵循普通全量规则，并非 Unity 面板的临时 QA 模式；同版本重复发布需要时勾选 FORCE_REBUILD。
+- `<项目>/QA`：固定版本 `99.99.99`、分支 `Tuanjie_Build/99.99.99`，复用全量构建流程和参数；不提供版本输入框，不创建 QA 热更 Job。平台、环境、Debug、缓存清理、强制重建及小游戏出包保持可选。平台上传、Git Tag、Source 归档遵循普通全量完成顺序，并非 Unity 面板的临时 QA 模式；99.99.99 允许同版本重复发布，不需要 FORCE_REBUILD；已有 Source 快照仍禁止覆盖。
 - `99.99.99` 保留给 QA，版本创建器拒绝创建同版本 Job，避免两个 Job 的构建号冲突。新项目仓库需自行准备 QA 分支；初始化器不会创建 Git 分支。已有项目不会自动补建 QA，也不要为此删除重建项目。
 - FullBuild：构建普通全量包，保存独立 Source；HotUpdate：从所选 Source 继承平台、环境、Debug 和 AOT；CodeSplit：围绕所选 Source 采集、正式分包、上传。
 - Git/抖音账号使用四个固定的 Jenkins 全局 Secret text。项目 JSON 只保留项目专属配置与其他凭证；缺失直接失败，无账号回退。关闭通知设 `feishu.enabled=false`。参见 [全局账号配置](docs/global-accounts.md)。
@@ -35,6 +35,7 @@ Source 的环境及 Debug 存在状态文件中，不以目录中的环境层级
 | releaseFiles | 原包/分包文件同步、路径检查与目录指纹 |
 | releaseWeChat / releaseTikTok | 两个平台的上传、采集、预览及正式分包命令 |
 | releaseSplitMetrics / releaseNotifications | 统计解析、参考版本及飞书通知 |
+| releaseUnityResult / releaseGitTag | Unity 结果契约、发布标签和仅补齐发布记录 |
 | releaseState / ReleaseStorage | 项目锁、Source/AOT 路径绑定、原子状态写入、操作检查点 |
 | TemplateText | 非 CPS 的模板转义和替换 |
 
@@ -67,3 +68,5 @@ CodeSplit 的采集、正式分包和上传分别记录 STARTED/DONE 检查点�
 长期运维工具仅保留 tools/verifyJenkins.groovy（只读 Source 验收）和 tools/recover.groovy（显式失败恢复）。全量、热更和 CodeSplit 共用 pipeline-job.xml.tpl，各自参数仍由 releaseParameters 生成；版本 Job 创建器保留独立参数模板。
 
 维护前应在构建空闲时记录当前可用提交，并按需要备份配置及状态。回退前核对目标代码与当前凭据结构、Source 状态格式是否一致；不得直接回退到依赖已删除旧凭据或 JSON 明文账号的历史版本。存在 STARTED 操作或项目锁时先按恢复文档处理，不做自动数据降级或旧格式兼容。
+
+Unity 平台准备、产物结果、CDN 与平台上传分工及发布补发说明见 [构建接口](docs/build-contract.md)。
