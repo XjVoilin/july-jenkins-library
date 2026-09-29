@@ -1,9 +1,12 @@
 def repo = new File(args[0])
 def temp = File.createTempDir('release-adapters-', '')
 def commands=[]
+boolean failLogin=false
 boolean failUpload=false
 boolean failFinalize=false
 def binding=new Binding([env:[BUILD_URL:'test/adapter'],echo:{m->},
+    pwd:{arg->temp.path},writeFile:{arg->},readFile:{arg->'OK'},
+    dir:{path,body->body()},deleteDir:{->},
     error:{m->throw new IllegalStateException(m.toString())},
     withEnv:{values,body->body()},
     fileExists:{path->false},
@@ -11,9 +14,10 @@ def binding=new Binding([env:[BUILD_URL:'test/adapter'],echo:{m->},
     bat:{arg->
         def text=arg instanceof Map?arg.script.toString():arg.toString()
         commands<<text
+        if(failLogin && text.contains('tmg login-e')) return -1073740791
         if(failUpload && text.contains('tmg upload')) throw new IOException('mock CLI failure')
         if(failFinalize && text.contains(' dosplit ')) throw new IOException('mock download failure')
-        'Upload success\ncurrent split version: 7'
+        arg instanceof Map && arg.returnStatus ? 0 : 'Upload success\ncurrent split version: 7'
     }])
 def shell=new GroovyShell(this.class.classLoader,binding)
 ['releaseCredentials','releaseFiles','releaseSplitMetrics','releaseWeChat','releaseTikTok'].each {name->
@@ -74,6 +78,13 @@ assert !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
 }
 failUpload=true
 try {binding.releaseTikTok.upload(tt);assert false}catch(IOException expected){}
+assert !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+failUpload=false
+failLogin=true
+commands.clear()
+try { binding.releaseTikTok.prepare(tt); assert false }
+catch(IllegalStateException expected) { assert expected.message.contains('0xC0000409') }
+assert !commands.any { it.contains('tt-wasmsplit-ci init') }
 assert !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
 // Exit-code-zero failures and missing success markers must still fail closed.
 binding.setVariable('bat',{args->'Error: mock failure'})

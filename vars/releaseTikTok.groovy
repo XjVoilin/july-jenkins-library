@@ -4,7 +4,8 @@ def withSession(Map c, Closure work) {
     def lease = ReleaseStorage.acquire(new File(c.farmRoot,'ToolSessions/TikTok'), env.BUILD_URL ?: env.BUILD_TAG)
     try {
         releaseJenkinsSecrets.withPair('douyin','DY_EMAIL','DY_PASSWORD') {
-            releaseFiles.runCheckedBat('抖音登录','tmg login-e "%DY_EMAIL%" "%DY_PASSWORD%"')
+            releaseFiles.runDiagnosedBat('抖音登录','tmg login-e "%DY_EMAIL%" "%DY_PASSWORD%"',
+                [env.DY_EMAIL, env.DY_PASSWORD])
             work()
         }
     } finally { ReleaseStorage.release(lease) }

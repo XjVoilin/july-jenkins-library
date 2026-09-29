@@ -9,7 +9,7 @@ ReleaseStorage.writeAtomic(state,[state:'COLLECTING'])
 def config = new CompilerConfiguration()
 config.sourceEncoding = 'UTF-8'
 config.addCompilationCustomizers(new CpsTransformer())
-def binding = new Binding([env:[BUILD_URL:'test/cps'],root:temp.path,statePath:state.path])
+def binding = new Binding([env:[BUILD_URL:'test/cps',DY_EMAIL:'fixture@example.invalid',DY_PASSWORD:'fixture-password'],root:temp.path,statePath:state.path])
 def shell = new GroovyShell(this.class.classLoader,binding,config)
 ['releaseParameters','releaseState','releaseCredentials','releaseFiles','releaseTikTok'].each { name ->
     binding.setVariable(name,shell.parse(new File(repo,'vars/'+name+'.groovy')))
@@ -19,7 +19,12 @@ import com.cloudbees.groovy.cps.Continuable
 binding.setVariable('echo', { text -> })
 binding.setVariable('error', { text -> throw new IllegalArgumentException(text.toString()) })
 binding.setVariable('withEnv', { settings, body -> body() })
-binding.setVariable('bat', { settings -> 'OK' })
+binding.setVariable('bat', { settings -> settings.returnStatus ? 0 : 'OK' })
+binding.setVariable('pwd', { settings -> root })
+binding.setVariable('writeFile', { settings -> })
+binding.setVariable('readFile', { settings -> 'OK' })
+binding.setVariable('dir', { path, body -> body() })
+binding.setVariable('deleteDir', { -> })
 binding.setVariable('releaseJenkinsSecrets', [withPair:{kind,first,second,body ->
     assert kind=='douyin' && first=='DY_EMAIL' && second=='DY_PASSWORD';body()
 }])

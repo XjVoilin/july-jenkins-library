@@ -8,6 +8,43 @@ def extractWasmMd5(String packageDir) {
 def runCheckedBat(String label, String command, List<String> requiredMarkers = []) {
     def output = bat(script: "@${command}", returnStdout: true).trim()
     if (output) { echo output }
+    return validateCliOutput(label, output, requiredMarkers)
+}
+
+/** 非零退出时仍读取 stdout/stderr；调用方必须在 withCredentials 内执行。 */
+def runDiagnosedBat(String label, String command, List<String> secrets = []) {
+    def logDir = "${pwd(tmp: true)}/cli-${java.util.UUID.randomUUID()}"
+    def logFile = "${logDir}/output.log"
+    long startedAt = System.currentTimeMillis()
+    echo "[${label}] 开始执行（stdout/stderr 已捕获，账号凭据脱敏）"
+    try {
+        writeFile(file: logFile, text: '', encoding: 'UTF-8')
+        int exitCode = bat(label: label, returnStatus: true, encoding: 'UTF-8',
+            script: "@${command} > \"${logFile}\" 2>&1")
+        def output = readFile(file: logFile, encoding: 'UTF-8').trim()
+        output = redactCliOutput(output, secrets)
+        echo output ?: "[${label}] CLI 未输出任何内容"
+        def hexCode = Integer.toHexString(exitCode).toUpperCase().padLeft(8, '0')
+        echo "[${label}] exitCode=${exitCode} (0x${hexCode}), elapsedMs=${System.currentTimeMillis() - startedAt}"
+        if (exitCode != 0) {
+            error "[${label}] 命令失败，退出码 ${exitCode} (0x${hexCode})；请查看上方 CLI 输出"
+        }
+        return validateCliOutput(label, output, [])
+    } finally {
+        // 原始输出可能含凭据，不归档；仅清理本次创建的专属临时目录。
+        dir(logDir) { deleteDir() }
+    }
+}
+
+@com.cloudbees.groovy.cps.NonCPS
+private String redactCliOutput(String output, List<String> secrets) {
+    secrets.findAll { it }.sort { a, b -> b.length() <=> a.length() }.each { secret ->
+        output = output.replace(secret, '****')
+    }
+    return output
+}
+
+private def validateCliOutput(String label, String output, List<String> requiredMarkers) {
     if (output =~ /(?im)(\bfailed\b|Upload Error:|(?:^|\s)Error:|找不到|失败)/) {
         error "[${label}] CLI 输出包含失败信息；已阻止读取旧状态或继续上传"
     }
