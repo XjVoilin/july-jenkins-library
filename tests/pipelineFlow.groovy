@@ -117,10 +117,14 @@ assert !harness.runSplit('ProjectA','TikTok','2','SOURCE_READY','启动代码分
 harness.failUpload = true
 assert harness.runSplit('ProjectA','TikTok','2','COLLECTING','生成正式分包并上传').failure
 uploads = harness.uploads
+finals = harness.finals
+def failedUpload = ReleaseStorage.read(ttSource).operations['upload-1']
 harness.failUpload = false
-def uncertain = harness.runSplit('ProjectA','TikTok','2','COLLECTING','生成正式分包并上传')
-assert uncertain.failure?.message?.contains('未确认')
-assert harness.uploads==uploads
+def uploadResumed = harness.runSplit('ProjectA','TikTok','2','COLLECTING','生成正式分包并上传')
+assert !uploadResumed.failure : uploadResumed.failure
+assert harness.uploads==uploads+1 && harness.finals==finals
+assert ReleaseStorage.read(ttSource).operations['upload-1'].previousAttempts*.owner==[failedUpload.owner]
+assert ReleaseStorage.read(ttSource).state=='UPLOADED'
 assert !new File(farm,'ProjectA/.jenkins-project.lock').exists()
 def held = ReleaseStorage.acquire(new File(farm,'ProjectA'),'another-active-job')
 def busy = harness.runBuild('ProjectA','WeChat','5')
@@ -250,13 +254,41 @@ assert !new File(farm,'ProjectA/AOTBackup').exists()
     assert harness.finals==finalCount && harness.uploads==uploadCount
     assert tamper.delete()
     harness.failUpload=true
-    assert harness.runSplit(project,platform,'1','COLLECTING','生成正式分包并上传').failure
-    harness.failUpload=false
+    def firstUpload=harness.runSplit(project,platform,'1','COLLECTING','生成正式分包并上传')
+    assert firstUpload.failure
     assert harness.finals==finalCount && harness.uploads==uploadCount+1
     assert ReleaseStorage.read(sourceFile).operations['finalize-1']==completed
-    def uploadUnknown=harness.runSplit(project,platform,'1','COLLECTING','生成正式分包并上传')
-    assert uploadUnknown.failure?.message?.contains('未确认')
-    assert harness.finals==finalCount && harness.uploads==uploadCount+1
+    def secondUpload=harness.runSplit(project,platform,'1','COLLECTING','生成正式分包并上传')
+    assert secondUpload.failure?.message?.contains('remote result unknown') : secondUpload.failure
+    assert harness.finals==finalCount && harness.uploads==uploadCount+2
+    def pendingUpload=ReleaseStorage.read(sourceFile).operations['upload-1']
+    assert pendingUpload.status=='STARTED' && pendingUpload.previousAttempts*.owner==[firstUpload.env.BUILD_URL]
+    // Retrying a pending upload must still reject changed artifacts without dispatching anything.
+    tamper.text='changed after upload failure'
+    def damagedRetry=harness.runSplit(project,platform,'1','COLLECTING','生成正式分包并上传')
+    assert damagedRetry.failure?.message?.contains('产物被改变')
+    assert ReleaseStorage.read(sourceFile).operations['upload-1']==pendingUpload
+    assert harness.finals==finalCount && harness.uploads==uploadCount+2
+    assert tamper.delete()
+    harness.failUpload=false
+    def beforeRetry=ReleaseStorage.read(sourceFile)
+    def rawBeforeRetry=harness.fingerprint(beforeRetry.rawPackagePath)
+    def collectionBeforeRetry=harness.fingerprint(beforeRetry.collectionPackagePath)
+    def aotBeforeRetry=harness.fingerprint(new File(sourceFile.parentFile,'aot').path)
+    int preparationsBeforeRetry=harness.preparations
+    def uploadRetry=harness.runSplit(project,platform,'1','COLLECTING','生成正式分包并上传')
+    assert !uploadRetry.failure : uploadRetry.failure
+    def afterRetry=ReleaseStorage.read(sourceFile)
+    assert afterRetry.state=='UPLOADED' && afterRetry.collectionCycle==beforeRetry.collectionCycle
+    assert afterRetry.operations['finalize-1']==completed
+    assert afterRetry.operations['collect-1']==beforeRetry.operations['collect-1']
+    assert afterRetry.operations['upload-1'].status=='DONE'
+    assert afterRetry.operations['upload-1'].previousAttempts*.owner==[firstUpload.env.BUILD_URL,secondUpload.env.BUILD_URL]
+    assert afterRetry.uploadedByBuild==uploadRetry.env.BUILD_NUMBER.toInteger()
+    assert harness.finals==finalCount && harness.uploads==uploadCount+3 && harness.preparations==preparationsBeforeRetry
+    assert harness.fingerprint(beforeRetry.rawPackagePath)==rawBeforeRetry
+    assert harness.fingerprint(beforeRetry.collectionPackagePath)==collectionBeforeRetry
+    assert harness.fingerprint(new File(sourceFile.parentFile,'aot').path)==aotBeforeRetry
 }
 // Same source/action retries after login failure without creating a failed checkpoint.
 assert !harness.runBuild('LoginRetry','TikTok','1').failure
@@ -276,7 +308,7 @@ harness.loginFailureStage=null
 assert !harness.runSplit('LoginRetry','TikTok','1','COLLECTING','生成正式分包并上传').failure
 assert harness.finals==finalizedBeforeRetry && harness.uploads==uploadedBeforeLogin+1
 assert ReleaseStorage.read(loginSource).state=='UPLOADED'
-println "PASS pipeline flow: $harness.runs runs; projects/platforms; full/hot/split; explicit AOT paths; no AOT copy; failed publication; old/tampered/foreign Source; argument guards; JSONNull; recollection and finalization retries; upload uncertainty blocked"
+println "PASS pipeline flow: $harness.runs runs; projects/platforms; full/hot/split; explicit AOT paths; no AOT copy; failed publication; old/tampered/foreign Source; argument guards; JSONNull; recollection, finalization and upload retries"
 println "Fixtures: $farm"
 
 class FlowHarness {
@@ -460,6 +492,7 @@ class FlowHarness {
         binding.setVariable('releaseState',[
             once:{path,operation,body->stateModule.once(path,operation,body)},
             oncePrepared:{path,operation,body->stateModule.oncePrepared(path,operation,body)},
+            uploadPackage:{path,operation,body->stateModule.uploadPackage(path,operation,body)},
             finalizePackage:{path,operation,body->stateModule.finalizePackage(path,operation,body)},
             update:{path,changes->
                 if(failCollectionState && changes.state=='COLLECTING')

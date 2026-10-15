@@ -103,30 +103,40 @@ class ReleaseStorage {
         state
     }
     @NonCPS static Map begin(File file, String key, String owner) {
-        beginOperation(file, key, owner, false)
+        beginOperation(file, key, owner, null)
     }
     /** 只检查既有记录；登录和本地准备期间不写 STARTED。调用方持有项目锁。 */
     @NonCPS static Map check(File file, String key) {
-        beginOperation(file, key, null, false, false)
+        beginOperation(file, key, null, null, false)
     }
-    /** 仅正式分包允许重做；调用方必须持有项目锁，平台适配器从干净副本执行 dosplit。 */
+    /** 正式分包重试从干净副本执行 dosplit；调用方必须持有项目锁。 */
     @NonCPS static Map beginFinalization(File file, String key, String owner) {
-        beginOperation(file, key, owner, true)
+        beginOperation(file, key, owner, 'finalize')
     }
-    @NonCPS private static Map beginOperation(File file, String key, String owner, boolean retryFinalization, boolean start = true) {
+    /** 当前周期的分包已完成后，允许用同一产物续跑上传；调用方负责指纹校验并持有项目锁。 */
+    @NonCPS static Map checkUpload(File file, String key) {
+        beginOperation(file, key, null, 'upload', false)
+    }
+    @NonCPS static Map beginUpload(File file, String key, String owner) {
+        beginOperation(file, key, owner, 'upload')
+    }
+    @NonCPS private static Map beginOperation(File file, String key, String owner, String retryOperation, boolean start = true) {
         def state = read(file)
         Map operations = state.operations ?: [:]
         def previous = operations[key]
-        if (retryFinalization && (!(state.platform in ['WeChat','TikTok']) ||
+        if (retryOperation && (!(state.platform in ['WeChat','TikTok']) ||
             state.state != 'COLLECTING' || !(state.collectionCycle instanceof Number) ||
-            state.collectionCycle < 1 || key != "finalize-${state.collectionCycle}")) {
-            throw new IllegalStateException('仅允许重试当前采集周期的正式分包')
+            state.collectionCycle < 1 || key != "${retryOperation}-${state.collectionCycle}")) {
+            throw new IllegalStateException('仅允许重试当前采集周期的正式分包或上传')
+        }
+        if (retryOperation == 'upload' && operations["finalize-${state.collectionCycle}".toString()]?.status != 'DONE') {
+            throw new IllegalStateException('正式分包尚未完成，禁止续跑上传')
         }
         if (previous?.status == 'DONE') return [done:true, result:previous.result]
-        if (retryFinalization && operations.containsKey("upload-${state.collectionCycle}".toString())) {
+        if (retryOperation == 'finalize' && operations.containsKey("upload-${state.collectionCycle}".toString())) {
             throw new IllegalStateException('本周期已有上传记录，禁止重新生成正式分包；请先核对上传结果')
         }
-        if (operations.any { name, op -> op.status == 'STARTED' && !(retryFinalization && name == key) }) {
+        if (operations.any { name, op -> op.status == 'STARTED' && !(retryOperation && name == key) }) {
             throw new IllegalStateException("Source 有未确认的外部操作，禁止盲目重试: ${file}；请核对平台结果后恢复。")
         }
         if (previous && previous.status != 'STARTED') {

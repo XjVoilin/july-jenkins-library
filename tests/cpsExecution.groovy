@@ -130,4 +130,33 @@ assert new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
 assert use(Continuable.categories) { prepared.run(null) }.prepared
 assert ReleaseStorage.read(state).operations['collect-2'].status=='DONE'
 assert !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
-println 'PASS CPS: actual CpsTransformer/Continuable; suspend/resume; module calls; abort cleanup; uncertain checkpoint retained'
+// A new build resumes a pending upload after login, preserving the completed split and old attempt.
+ReleaseStorage.writeAtomic(state,[state:'COLLECTING',platform:'TikTok',collectionCycle:1,operations:[
+    'finalize-1':[status:'DONE',result:[fingerprint:'verified']],
+    'upload-1':[status:'STARTED',owner:'test/upload-old',startedAt:1]]])
+binding.env.BUILD_URL='test/upload-retry'
+def beforeUpload=state.text
+def uploadRetry=new Continuable(shell.parse('''
+import com.cloudbees.groovy.cps.Continuable
+def result=releaseState.uploadPackage(statePath,'upload-1') { start ->
+    releaseTikTok.withSession([farmRoot:root]) {
+        Continuable.suspend('upload-prepared')
+        start()
+        Continuable.suspend('upload-dispatched')
+        [receipt:'accepted']
+    }
+}
+assert result.receipt=='accepted'
+assert releaseState.uploadPackage(statePath,'upload-1') { assert false }.receipt=='accepted'
+return 'uploaded'
+'''))
+assert use(Continuable.categories) { uploadRetry.run(null) }=='upload-prepared'
+assert state.text==beforeUpload
+assert use(Continuable.categories) { uploadRetry.run(null) }=='upload-dispatched'
+assert ReleaseStorage.read(state).operations['upload-1'].previousAttempts*.owner==['test/upload-old']
+assert new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+assert use(Continuable.categories) { uploadRetry.run(null) }=='uploaded'
+assert ReleaseStorage.read(state).operations['upload-1'].status=='DONE'
+assert ReleaseStorage.read(state).operations['finalize-1'].result.fingerprint=='verified'
+assert !new File(temp,'ToolSessions/TikTok/.jenkins-project.lock').exists()
+println 'PASS CPS: actual CpsTransformer/Continuable; suspend/resume; module calls; abort cleanup; upload retry/history and DONE reuse'

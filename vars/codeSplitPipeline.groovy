@@ -335,7 +335,7 @@ def call(Map config) {
                     script {
                         def context = splitContext + [packageDir:env.RELEASE_PACKAGE_DIR,
                             description:"v${env.CODE_SPLIT_VERSION} FullBuild#${env.SOURCE_BUILD_NUMBER} CodeSplit"]
-                        def receipt = releaseState.oncePrepared(env.SPLIT_STATE_FILE, "upload-${env.COLLECTION_CYCLE}") { start ->
+                        def receipt = releaseState.uploadPackage(env.SPLIT_STATE_FILE, "upload-${env.COLLECTION_CYCLE}") { start ->
                             if (env.CODE_SPLIT_PLATFORM == 'WeChat') { start(); releaseWeChat.upload(context) }
                             else releaseTikTok.upload(context, start)
                             return [build:env.BUILD_NUMBER, url:env.BUILD_URL]

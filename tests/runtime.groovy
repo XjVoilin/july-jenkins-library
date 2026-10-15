@@ -131,5 +131,43 @@ check(source.listFiles().every { !it.name.startsWith('.release-') })
     Store.writeAtomic(retryFile,base+[operations:['finalize-1':[status:'invalid']]])
     rejects { script.finalizePackage(retryFile.path,'finalize-1') { assert false } }
 }
-println "PASS runtime: $checks checks; leases/race/ownership; source collisions; immutable state; checkpoints"
+['WeChat','TikTok'].each { platform ->
+    def uploadFile=new File(temp,platform+'-upload-retry.json')
+    def base=[state:'COLLECTING',platform:platform,collectionCycle:2,rawWasmMd5:'baseline',operations:[
+        'upload-1':[status:'DONE',result:[build:'old']],
+        'finalize-2':[status:'DONE',result:[fingerprint:'stable']],
+        'upload-2':[status:'STARTED',owner:'upload/old',startedAt:1]]]
+    Store.writeAtomic(uploadFile,base)
+    def beforeLogin=uploadFile.text
+    try { script.uploadPackage(uploadFile.path,'upload-2') { start -> throw new IOException('login failed') };assert false }
+    catch(IOException expected) { checks++ }
+    check(uploadFile.text==beforeLogin)
+    script.binding.env.BUILD_URL='upload/failed'
+    try { script.uploadPackage(uploadFile.path,'upload-2') { start -> start();throw new IOException('timeout') };assert false }
+    catch(IOException expected) { checks++ }
+    script.binding.env.BUILD_URL='upload/success'
+    check(script.uploadPackage(uploadFile.path,'upload-2') { start -> start();[receipt:'accepted'] }.receipt=='accepted')
+    check(script.uploadPackage(uploadFile.path,'upload-2') { assert false }.receipt=='accepted')
+    def saved=Store.read(uploadFile)
+    check(saved.operations['upload-2'].status=='DONE' && saved.operations['upload-2'].owner=='upload/success')
+    check(saved.operations['upload-2'].previousAttempts*.owner==['upload/old','upload/failed'])
+    check(saved.operations['upload-2'].previousAttempts.every { it.status=='STARTED' && it.supersededAt && !it.previousAttempts })
+    check(saved.operations['finalize-2']==base.operations['finalize-2'] && saved.operations['upload-1']==base.operations['upload-1'])
+    check(saved.rawWasmMd5=='baseline' && saved.collectionCycle==2)
+    ['collect-2','finalize-2','upload-1','upload-3'].each { key ->
+        rejects { script.uploadPackage(uploadFile.path,key) { assert false } }
+    }
+    [[state:'UPLOADED'],[platform:'Unknown'],[collectionCycle:0]].each { change ->
+        Store.writeAtomic(uploadFile,base+change)
+        rejects { script.uploadPackage(uploadFile.path,'upload-2') { assert false } }
+    }
+    [[:],['finalize-2':[status:'STARTED']],['finalize-2':[status:'DONE'],'upload-2':[status:'invalid']],
+     base.operations+['collect-3':[status:'STARTED']],base.operations+['upload-1':[status:'STARTED']]].each { operations ->
+        Store.writeAtomic(uploadFile,base+[operations:operations])
+        def before=uploadFile.text
+        rejects { script.uploadPackage(uploadFile.path,'upload-2') { assert false } }
+        check(uploadFile.text==before)
+    }
+}
+println "PASS runtime: $checks checks; leases/race/ownership; source collisions; immutable state; checkpoints; upload retry guards/history"
 println "Fixtures: $temp"
