@@ -1,0 +1,45 @@
+name: Mirror Jenkins library to Gitee
+
+on:
+  push:
+    branches: [main]
+    tags: ['**']
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * *'
+
+permissions: {}
+
+concurrency:
+  group: jenkins-gitee-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}.git
+      GITEE_REPOSITORY_URL: https://gitee.com/xiao_someone/july-jenkins-library.git
+      GIT_TERMINAL_PROMPT: '0'
+
+    steps:
+      - name: Fetch source branches and tags
+        shell: bash
+        run: |
+          git init --bare source.git
+          git -C source.git fetch --no-tags "$SOURCE_URL" \
+            'refs/heads/*:refs/heads/*' \
+            'refs/tags/*:refs/tags/*'
+
+      - name: Push branches and tags to Gitee
+        shell: bash
+        env:
+          GITEE_USERNAME: xiao_someone
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          : "${GITEE_TOKEN:?Set the GITEE_TOKEN repository secret}"
+          git -C source.git config credential.helper \
+            '!f() { printf "%s\n" "username=$GITEE_USERNAME" "password=$GITEE_TOKEN"; }; f'
+          git -C source.git push --progress "$GITEE_REPOSITORY_URL" \
+            'refs/heads/*:refs/heads/*' \
+            'refs/tags/*:refs/tags/*'

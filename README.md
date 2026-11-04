@@ -61,9 +61,9 @@ CodeSplit 的采集、正式分包和上传分别记录 STARTED/DONE 检查点�
 
 参见 [验证步骤](docs/validation.md) 和 [失败恢复](docs/recovery.md)。
 
-共享库名称统一为 `july-jenkins-library`，Job 使用 `@Library('july-jenkins-library') _`。Jenkins 的 Modern SCM / Git 地址为 `https://github.com/XjVoilin/july-jenkins-library.git`，默认版本为 `main`（正式环境也可固定验收后的提交或 tag）。新构建从 GitHub 加载；本地修改需提交并推送，已经运行的构建不会中途切换库版本。
+共享库名称统一为 `july-jenkins-library`，Job 使用 `@Library('july-jenkins-library') _`，默认版本为 `main`（正式环境也可固定验收后的提交或 tag）。源码在 `https://github.com/XjVoilin/july-jenkins-library.git` 维护。国内打包机可在镜像首次同步成功后，将 Jenkins 的 Modern SCM / Git 地址切到 `https://gitee.com/xiao_someone/july-jenkins-library.git`；库名和现有 Job 引用保持不变。新构建从配置的地址加载，已经运行的构建不会中途切换库版本。
 
-正式维护目录使用 `D:/Jenkins/july-jenkins-library`。该目录用于修改、测试、提交，以及运行管理员工具，不要求 Jenkins 从本地目录加载。多台独立打包机可以使用同一 GitHub 仓库，但各自配置工具、凭据和 BuildFarm。详见 [GitHub 接入](docs/github.md)。
+正式维护目录使用 `D:/Jenkins/july-jenkins-library`。该目录用于修改、测试、提交，以及运行管理员工具，不要求 Jenkins 从本地目录加载。多台独立打包机可以使用同一 Gitee 镜像或 GitHub 主仓库，但各自配置工具、凭据和 BuildFarm。详见 [GitHub 与 Gitee 接入](docs/github.md)。
 
 已有项目/版本 Job 不需要重建。运行时会同步参数定义，新建 Job 使用同一份定义生成 XML。涉及新项目 Source 脚本时仍可能需要管理员审批；不自动批准所有脚本。
 
