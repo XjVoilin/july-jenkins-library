@@ -37,7 +37,6 @@ import org.july.release.ReleaseStorage
  *   extraParams  - 额外参数定义列表
  *   fixedParams  - 锁定参数 Map（如 [ENV:'Test', DEBUG:true]），锁定的参数不出现在 Jenkins UI
  *   extraArgs         - 传给 Unity 的额外命令行参数闭包 { -> [] }
- *   unityProxyUrl     - Unity/UPM 使用的 HTTP 代理（默认 http://127.0.0.1:7890）
  *   buildFarmRoot     - 多项目构建根目录（默认 D:\\BuildFarm）
  *   credentialsFile  - 项目明文配置文件（默认 <buildFarmRoot>\\<projectName>\\Secrets\\credentials.local.json）
  */
@@ -66,12 +65,6 @@ def call(Map config) {
     def extraParams       = config.extraParams       ?: []
     def fixedParams       = config.fixedParams       ?: [:]
     def savedParamsFile   = '.jenkins_saved_params'
-    def unityProxyUrl     = config.unityProxyUrl ?: 'http://127.0.0.1:7890'
-    def unityProxyEnv     = [
-        "HTTP_PROXY=${unityProxyUrl}",
-        "HTTPS_PROXY=${unityProxyUrl}",
-        'NO_PROXY=localhost,127.0.0.1',
-    ]
 
     def project = releaseProject.load(config)
     def projectLease = null
@@ -350,7 +343,7 @@ def call(Map config) {
                         echo "[SyncDefines] ${cmd}"
 
                         releaseCredentials.withGitAuthentication() {
-                            withEnv(unityProxyEnv) { bat cmd }
+                            bat cmd
                         }
                     }
                 }
@@ -413,7 +406,7 @@ def call(Map config) {
                         echo "执行命令: ${cmd}"
 
                         releaseCredentials.withGitAuthentication() {
-                            withEnv(unityProxyEnv) { bat cmd }
+                            bat cmd
                         }
                     }
                 }
